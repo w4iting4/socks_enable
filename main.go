@@ -90,14 +90,16 @@ func main() {
 
 			response, err := client.Get(*urlFlag)
 			if err != nil {
-				fmt.Printf("请求失败: %s\n", err)
+				fmt.Printf("%s 请求失败: %s\n", purl, err)
+				_, err = outputFile.WriteString(fmt.Sprintf("'%s': ,err: %s", purl, err)
 				return
 			}
 			defer response.Body.Close()
 
 			body, err := ioutil.ReadAll(response.Body)
 			if err != nil {
-				fmt.Printf("读取响应体失败: %s\n", err)
+				fmt.Printf("%s 读取响应体失败: %s\n", purl, err)
+				_, err = outputFile.WriteString(fmt.Sprintf("'%s': ,err: %s", purl, err)
 				return
 			}
 

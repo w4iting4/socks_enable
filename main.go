@@ -89,8 +89,6 @@ func main() {
 			}
 
 			response, err := client.Get(*urlFlag)
-
-			mutex.Lock()
 			if err != nil {
 				fmt.Printf("请求失败: %s\n", err)
 				return
@@ -102,6 +100,8 @@ func main() {
 				fmt.Printf("读取响应体失败: %s\n", err)
 				return
 			}
+
+			mutex.Lock()
 			if *outputBodyFlag {
 				fmt.Printf("'%s': status_code: %d response_body: %s\n", purl, response.StatusCode, string(body))
 				_, err = outputFile.WriteString(fmt.Sprintf("'%s': status_code: %d response_body: %s\n", purl, response.StatusCode, string(body)))

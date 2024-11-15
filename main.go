@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -40,7 +41,7 @@ func main() {
 	// 打开或创建用于写入结果的文件
 	outputFile, err := os.OpenFile(*outputFileFlag, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		fmt.Printf("打开输出文件失败: %s\n", err)
+		fmt.Printf("��开输出文件失败: %s\n", err)
 		return
 	}
 	defer outputFile.Close()
@@ -61,26 +62,40 @@ func main() {
 
 		go func(purl string) {
 			defer wg.Done()
-			defer func() { <-goroutineSem }() // 释放信号量槽位
+			defer func() { <-goroutineSem }()
 
-			_, user, pass, host, err := parseProxyURL(purl)
+			protocol, user, pass, host, err := parseProxyURL(purl)
 			if err != nil {
 				fmt.Printf("解析代理 URL 失败: %s\n", err)
 				return
 			}
 
-			// 配置 SOCKS 代理
-			dialer, err := proxy.SOCKS5("tcp", host, &proxy.Auth{
-				User:     user,
-				Password: pass,
-			}, proxy.Direct)
-			if err != nil {
-				fmt.Printf("配置代理失败: %s\n", err)
-				return
-			}
+			var transport *http.Transport
 
-			transport := &http.Transport{
-				Dial: dialer.Dial,
+			if protocol == "http" {
+				// 配置 HTTP 代理
+				proxyURL := fmt.Sprintf("http://%s:%s@%s", user, pass, host)
+				proxyURLParsed, err := url.Parse(proxyURL)
+				if err != nil {
+					fmt.Printf("解析 HTTP 代理 URL 失败: %s\n", err)
+					return
+				}
+				transport = &http.Transport{
+					Proxy: http.ProxyURL(proxyURLParsed),
+				}
+			} else {
+				// 配置 SOCKS 代理
+				dialer, err := proxy.SOCKS5("tcp", host, &proxy.Auth{
+					User:     user,
+					Password: pass,
+				}, proxy.Direct)
+				if err != nil {
+					fmt.Printf("配置代理失败: %s\n", err)
+					return
+				}
+				transport = &http.Transport{
+					Dial: dialer.Dial,
+				}
 			}
 
 			client := &http.Client{
@@ -104,10 +119,10 @@ func main() {
 			mutex.Lock()
 			if *outputBodyFlag {
 				fmt.Printf("'%s': status_code: %d response_body: %s\n", purl, response.StatusCode, string(body))
-				_, err = outputFile.WriteString(fmt.Sprintf("'%s': status_code: %d response_body: %s\n", purl, response.StatusCode, string(body)))
+				_, err = outputFile.WriteString(fmt.Sprintf("%s: status_code: %d response_body: %s\n", purl, response.StatusCode, string(body)))
 			} else {
 				fmt.Printf("'%s': status_code: %d\n", purl, response.StatusCode)
-				_, err = outputFile.WriteString(fmt.Sprintf("'%s': status_code: %d\n", purl, response.StatusCode))
+				_, err = outputFile.WriteString(fmt.Sprintf("%s: status_code: %d\n", purl, response.StatusCode))
 			}
 			mutex.Unlock()
 
@@ -125,7 +140,10 @@ func main() {
 }
 
 func parseProxyURL(proxyURL string) (protocol, user, pass, host string, err error) {
-	if strings.HasPrefix(proxyURL, "socks5://") {
+	// 支持 HTTP 和 SOCKS 代理
+	if strings.HasPrefix(proxyURL, "http://") {
+		protocol = "http"
+	} else if strings.HasPrefix(proxyURL, "socks5://") {
 		protocol = "socks5"
 	} else if strings.HasPrefix(proxyURL, "socks4://") {
 		protocol = "socks4"
